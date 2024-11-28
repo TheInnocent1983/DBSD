@@ -101,8 +101,8 @@ VALUES
 
 **Why Insert Data?**
 
-    Testing Constraints: Ensures that foreign key constraints are working properly (e.g., you can’t insert a Rental with an InstrumentID that doesn't exist).
-    Validation: Helps confirm that your tables and relationships are properly structured and that queries involving joins work as expected.
-    Data Integrity: You can verify that data in linked tables remains consistent when updates or deletions are performed.
+- **Testing Constraints**: Ensures that foreign key constraints are working properly (e.g., you can’t insert a Rental with an InstrumentID that doesn't exist).
+- **Validation**: Helps confirm that your tables and relationships are properly structured and that queries involving joins work as expected.
+- **Data Integrity**: You can verify that data in linked tables remains consistent when updates or deletions are performed.
 
-By inserting sample data, you can test queries such as joining Customer and Rental to see which customers have rented instruments, checking Sale and Instrument for sales data, and much more.
+By inserting sample data, you can test queries such as joining `Customer` and `Rental` to see which customers have rented instruments, checking `Sale` and `Instrument` for sales data, and much more.
