@@ -1,120 +1,175 @@
-### 3. Mapping EER Diagram to Relational Model
+## 4. Validation and Normalization
 
-#### 1. Superclass Attributes
+#### **Objective**
 
-**Superclass `Instrument`**
+This part validates the relational database schema to ensure it adheres to the Third Normal Form (3NF). Where necessary, functional dependencies (FDs) violating 3NF are introduced, analyzed, and resolved through normalization. The schema is updated and demonstrated using SQL scripts and example data.
 
-**Shared Attributes:**
-- **InstrumentID (PK)**: A unique identifier for each instrument.
-- **InstrumentName**: The name of the instrument (e.g., Piano, Guitar, etc.).
-- **Category**: The category of the instrument (e.g., string).
-- **Manufacturer**: The company that manufactured the instrument.
-- **Condition**: The condition of the instrument (default - new).
-  *Note: Enforced at application layer*.
-- **SupplierID (FK)**: A unique identifier of the supplier.
+### **1. Functional Dependencies and Violations**
 
-**Justification**:
-These attributes are **shared** across all instruments, regardless of whether they are sold or rented. Storing these attributes in a separate table ensures:
-- **Data Normalization**: Avoids duplication of common fields across subclasses.
-- **Consistency**: Any changes to common data (e.g., `Condition` or `Manufacturer`) are updated in one place.
+#### **Initial Analysis**
 
-#### 2. Subclass-Specific Attributes
+The original schema satisfies 3NF. However, to demonstrate normalization, an assumption was added:
 
-**Subclass 1: `SoldInstrument`
-- **SoldInstrumentID (PK)**: A unique identifier for each sold instrument.
-- **InstrumentID (FK)**: A unique identifier for each instrument.
-- **SaleID (FK)**: A unique identifier for each instrument on sale.
-- **WarrantyPeriod**: The warranty period of the instrument.
+**Assumption:**
 
-**Subclass 2:** `RentedInstrument`
-- **RentedInstrumentID (PK)**:
-- **InstrumentID (FK)**: A unique identifier for each instrument.
-- **RentalID (FK)**: A unique identifier for each instrument on rent.
-- **RentalDuration**: The date when the instrument is rented and should be returned.
+- An instrument's category determines its manufacturer:  
+    `Category → Manufacturer`
 
-**Justification**:
-These attributes are unique to the specific business processes of selling and renting instruments. Splitting them into subclasses ensures that:
-- Each table only contains relevant attributes, avoiding **NULL values** for unused fields (e.g., `WarrantyPeriod` in a rented instrument).
+#### **Impact of the New FD**
 
-#### 3. Why `Table per Subclass` Strategy was chosen?
+This assumption introduces a **transitive dependency** in the `Instrument` table:
 
-Two alternative strategies, `Table per Hierarchy` and `Table per Concrete Class`, were considered but deemed unsuitable.
+- Primary key: `InstrumentID`
+- Dependencies:
+    - `InstrumentID → Category`
+    - `Category → Manufacturer`
 
-The `Table per Hierarchy` approach involves storing all attributes in a single table with a discriminator column to differentiate subclasses. While this simplifies the schema, it leads to many NULL values for attributes not relevant to specific subclasses (e.g., `WarrantyPeriod` for rented instruments) and lacks support for enforcing subclass-specific constraints.
+**Violation:**  
+This creates a transitive dependency:  
+`InstrumentID → Category → Manufacturer`
 
-The `Table per Concrete Class` strategy, where each subclass is represented by its own table without a superclass table, results in significant data duplication for shared attributes like `InstrumentName` and `Manufacturer`. This violates normalization principles, increases storage requirements, and complicates updates and queries.
+- **Reason for Violation:**
+    - `Manufacturer` is dependent on `Category`, which is not part of the primary key (`InstrumentID`).
+    - This violates 3NF, where all non-prime attributes must be directly dependent on the table's primary key.
 
-In contrast, the `Table per Subclass` strategy avoids these issues by normalizing shared attributes in the `Instrument` table while maintaining separate tables for `SoldInstrument` and `RentedInstrument`. This approach enforces constraints, avoids redundancy, and keeps the schema scalable and easy to maintain.
+### **2. Normalization Process**
 
-**1. Reduces Redundancy and avoids sparse tables:**
-- if all attributes were stored in a single table (e.g., `Instrument`), many rows would have **NULL values** for attributes that do not apply (e.g., a sold instrument would have NULL values for `RentalDuration`).
-- Splitting into separate subclass tables eliminated the redundancy.
+#### **Decomposition to 3NF**
 
-**2. Enforces Constraints Unique to Each Subclass:**
-- Constraints, such as ensuring that `WarrantyPeriod` is **NOT NULL** for sold instruments, can be applied at the table level.
-- This improves data integrity and reduces reliance on application-level validation.
+To resolve the violation, the `Instrument` table was decomposed into two tables:
 
-**3. Aligns with MS SQL Server's Relational Schema:**
-- MS SQL Server's relational schema design supports primary and foreign key relationships, making it easy to implement the `Table per Subclass` strategy.
+1. **CategoryManufacturer Table**
+    
+    - Captures the functional dependency `Category → Manufacturer`.
+    - Eliminates redundancy in the `Instrument` table.
 
-#### 4. Implementation in Relational Schema**
+**Schema:**
+```sql
+CREATE TABLE CategoryManufacturer (
+    Category VARCHAR(50) PRIMARY KEY,
+    Manufacturer VARCHAR(100) NOT NULL
+);
+```
 
-**Tables and Relationships**:
+2. **Modified Instrument Table**
+    
+    - Retains attributes directly dependent on the primary key (`InstrumentID`).
 
-1. `Instrument` **Table (Superclass)**
-   - Stores shared attributes
-   - Acts as a **parent table** for subclasses.
-   - **Primary Key**: `InstrumentID`.
-2. `SoldInstrument` **Table (Subclass)
-   - References `Instrument` via `InstrumentID` as a **foreign key**.
-   - Contains attributes specific to sold instruments.
-   - **Primary Key**: `SoldInstrumentID`.
-3. `RentedInstrument` **Table (Subclass)**
-   - References `Instrument` via `InstrumentID` as a **foreign key**.
-   - Contains attributes specific to rented instruments.
-   - **Primary Key**: `RentedInstrumentID`.
+**Schema:**
+```sql
+CREATE TABLE Instrument (
+    InstrumentID INT PRIMARY KEY,
+    InstrumentName VARCHAR(100) NOT NULL,
+    Category VARCHAR(50) NOT NULL,
+    SupplierID INT NOT NULL,
+    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID),
+    FOREIGN KEY (Category) REFERENCES CategoryManufacturer(Category)
+);
+```
 
+#### **Steps to Normalize**
 
-![[Pasted image 20241127093319.png]]
+1. Identified the transitive dependency: `InstrumentID → Category → Manufacturer`.
+2. Moved the dependency `Category → Manufacturer` to a new table (`CategoryManufacturer`).
+3. Updated `Instrument` to reference `CategoryManufacturer` via the `Category` attribute.
 
-*Note: It is attached as a separate file named ______________*.
+### **3. Final Schema**
 
-1. `Instument` **Table**
+#### **CategoryManufacturer Table**
+
+Stores the FD `Category → Manufacturer`.
+
+```sql
+CREATE TABLE CategoryManufacturer (
+    Category VARCHAR(50) PRIMARY KEY,
+    Manufacturer VARCHAR(100) NOT NULL
+);
+```
+#### **Instrument Table**
+
+References `CategoryManufacturer` for the `Category` attribute.
 
 ```sql
 CREATE TABLE Instrument (
-    InstrumentID INT PRIMARY KEY IDENTITY(1,1), -- Unique identifier for each instrument
-    InstrumentName VARCHAR(100) NOT NULL, -- Name of the instrument
-    Category VARCHAR(50), -- Category of the instrument (e.g., string, percussion)
-    Manufacturer VARCHAR(100), -- Manufacturer of the instrument
-    Condition VARCHAR(50) DEFAULT 'New', -- Condition of the instrument (default set to 'New')
-    SupplierID INT NOT NULL, -- Foreign Key to Supplier table
-    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID)
+    InstrumentID INT PRIMARY KEY,
+    InstrumentName VARCHAR(100) NOT NULL,
+    Category VARCHAR(50) NOT NULL,
+    SupplierID INT NOT NULL,
+    FOREIGN KEY (SupplierID) REFERENCES Supplier(SupplierID),
+    FOREIGN KEY (Category) REFERENCES CategoryManufacturer(Category)
 );
 ```
 
-2. `SoldInstrument` **Table**
+### **4. Data Population**
+
+#### **Populating CategoryManufacturer**
 
 ```sql
-CREATE TABLE SoldInstrument (
-    SoldInstrumentID INT PRIMARY KEY IDENTITY(1,1), -- Unique ID for sold instruments
-    InstrumentID INT NOT NULL, -- Foreign Key to Instrument table
-    SaleID INT NOT NULL, -- Foreign Key to Sale table
-    WarrantyPeriod INT, -- Warranty period for the sold instrument in months
-    FOREIGN KEY (InstrumentID) REFERENCES Instrument(InstrumentID),
-    FOREIGN KEY (SaleID) REFERENCES Sale(SaleID)
-);
+INSERT INTO CategoryManufacturer (Category, Manufacturer)
+VALUES
+    ('String', 'Fender'),
+    ('Percussion', 'Yamaha'),
+    ('Keyboard', 'Steinway'),
+    ('Wind', 'Yamaha');
 ```
 
-3. `RentedInstrument` **Table**
+#### **Populating Instrument**
 
 ```sql
-CREATE TABLE RentedInstrument (
-    RentedInstrumentID INT PRIMARY KEY IDENTITY(1,1), -- Unique ID for rented instruments
-    InstrumentID INT NOT NULL, -- Foreign Key to Instrument table
-    RentalID INT NOT NULL, -- Foreign Key to Rental table
-    RentalDuration INT, -- Duration of the rental in days
-    FOREIGN KEY (InstrumentID) REFERENCES Instrument(InstrumentID),
-    FOREIGN KEY (RentalID) REFERENCES Rental(RentalID)
-);
+INSERT INTO Instrument (InstrumentID, InstrumentName, Category, SupplierID)
+VALUES
+    (1, 'Guitar', 'String', 2),       -- SupplierID 2 corresponds to Fender
+    (2, 'Drum Set', 'Percussion', 1),-- SupplierID 1 corresponds to Yamaha
+    (3, 'Piano', 'Keyboard', 3),     -- SupplierID 3 corresponds to Steinway
+    (4, 'Flute', 'Wind', 1);         -- SupplierID 1 corresponds to Yamaha
 ```
+
+### **5. Verification**
+
+#### **Join Query: Retrieve Instrument Details with Manufacturer**
+
+```sql
+SELECT 
+    i.InstrumentID,
+    i.InstrumentName,
+    i.Category,
+    cm.Manufacturer,
+    i.SupplierID
+FROM 
+    Instrument i
+JOIN 
+    CategoryManufacturer cm ON i.Category = cm.Category;
+```
+
+**Result:**
+
+|**InstrumentID**|**InstrumentName**|**Category**|**Manufacturer**|**SupplierID**|
+|---|---|---|---|---|
+|1|Guitar|String|Fender|2|
+|2|Drum Set|Percussion|Yamaha|1|
+|3|Piano|Keyboard|Steinway|3|
+|4|Flute|Wind|Yamaha|1|
+
+### **6. Explanation of Changes**
+
+#### **Why These Changes Were Made**
+
+- To eliminate the transitive dependency `InstrumentID → Category → Manufacturer`.
+- To ensure all tables are in 3NF, with non-key attributes directly dependent on the primary key.
+
+#### **How the Schema Satisfies 3NF**
+
+1. **Instrument Table:**
+    - All attributes (`InstrumentName`, `Category`, `SupplierID`) depend solely on the primary key (`InstrumentID`).
+2. **CategoryManufacturer Table:**
+    - The `Manufacturer` attribute depends solely on the primary key (`Category`).
+
+#### **Benefits of the Normalized Schema**
+
+- Eliminates redundancy by storing `Manufacturer` information in one place.
+- Avoids anomalies during updates, deletions, or insertions.
+- Maintains data integrity across related tables.
+
+### **7. Conclusion**
+
+The relational schema has been successfully validated and normalized to 3NF. The process included introducing a functional dependency that violates 3NF, analyzing its impact, and decomposing the schema to eliminate violations. The final schema is now free of redundancy and anomalies, adhering to database design best practices.
